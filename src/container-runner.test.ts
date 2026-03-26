@@ -41,14 +41,17 @@ vi.mock('fs', async () => {
       readFileSync: vi.fn(() => ''),
       readdirSync: vi.fn(() => []),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
-      copyFileSync: vi.fn(),
+      cpSync: vi.fn(),
     },
   };
 });
 
-// Mock mount-security
-vi.mock('./mount-security.js', () => ({
-  validateAdditionalMounts: vi.fn(() => []),
+// Mock container-runtime (stubbed functions)
+vi.mock('./container-runtime.js', () => ({
+  CONTAINER_RUNTIME_BIN: 'claude',
+  hostGatewayArgs: vi.fn(() => []),
+  readonlyMountArgs: vi.fn(() => []),
+  stopContainer: vi.fn(() => 'true'),
 }));
 
 // Mock OneCLI SDK
@@ -70,12 +73,14 @@ function createFakeProcess() {
     stderr: PassThrough;
     kill: ReturnType<typeof vi.fn>;
     pid: number;
+    killed: boolean;
   };
   proc.stdin = new PassThrough();
   proc.stdout = new PassThrough();
   proc.stderr = new PassThrough();
   proc.kill = vi.fn();
   proc.pid = 12345;
+  proc.killed = false;
   return proc;
 }
 
@@ -154,7 +159,7 @@ describe('container-runner timeout behavior', () => {
     // Fire the hard timeout (IDLE_TIMEOUT + 30s = 1830000ms)
     await vi.advanceTimersByTimeAsync(1830000);
 
-    // Emit close event (as if container was stopped by the timeout)
+    // Emit close event (as if process was killed by the timeout)
     fakeProc.emit('close', 137);
 
     // Let the promise resolve
