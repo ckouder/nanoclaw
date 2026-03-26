@@ -42,14 +42,10 @@ vi.mock('fs', async () => {
       readdirSync: vi.fn(() => []),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
+      cpSync: vi.fn(),
     },
   };
 });
-
-// Mock mount-security
-vi.mock('./mount-security.js', () => ({
-  validateAdditionalMounts: vi.fn(() => []),
-}));
 
 // Mock OneCLI SDK
 vi.mock('@onecli-sh/sdk', () => ({
@@ -98,6 +94,7 @@ vi.mock('child_process', async () => {
 });
 
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import { spawn } from 'child_process';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -121,6 +118,45 @@ function emitOutputMarker(
   const json = JSON.stringify(output);
   proc.stdout.push(`${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`);
 }
+
+describe('container-runner spawns claude CLI', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeProc = createFakeProcess();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('spawns claude with correct args', async () => {
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+    );
+
+    // Yield microtasks so the async buildProcessEnv resolves before spawn is called
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Verify spawn was called with claude
+    expect(spawn).toHaveBeenCalledWith(
+      'claude',
+      expect.arrayContaining(['--print', '--output-format', 'json', '-p', 'Hello']),
+      expect.objectContaining({
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }),
+    );
+
+    // Complete the process
+    fakeProc.stdout.push(JSON.stringify({ result: 'Hi there' }));
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('success');
+  });
+});
 
 describe('container-runner timeout behavior', () => {
   beforeEach(() => {
@@ -154,7 +190,7 @@ describe('container-runner timeout behavior', () => {
     // Fire the hard timeout (IDLE_TIMEOUT + 30s = 1830000ms)
     await vi.advanceTimersByTimeAsync(1830000);
 
-    // Emit close event (as if container was stopped by the timeout)
+    // Emit close event (as if process was killed by the timeout)
     fakeProc.emit('close', 137);
 
     // Let the promise resolve

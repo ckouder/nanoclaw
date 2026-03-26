@@ -1,99 +1,67 @@
 /**
  * Container runtime abstraction for NanoClaw.
- * All runtime-specific logic lives here so swapping runtimes means changing one file.
+ * Direct-runner mode: Claude Code runs as a child process, not in a container.
+ * All Docker-specific logic is stubbed out.
  */
 import { execSync } from 'child_process';
-import os from 'os';
 
 import { logger } from './logger.js';
 
-/** The container runtime binary name. */
-export const CONTAINER_RUNTIME_BIN = 'docker';
+/** Kept for interface compatibility — unused in direct-runner mode. */
+export const CONTAINER_RUNTIME_BIN = 'claude';
 
-/** CLI args needed for the container to resolve the host gateway. */
+/** No-op: host gateway is irrelevant without containers. */
 export function hostGatewayArgs(): string[] {
-  // On Linux, host.docker.internal isn't built-in — add it explicitly
-  if (os.platform() === 'linux') {
-    return ['--add-host=host.docker.internal:host-gateway'];
-  }
   return [];
 }
 
-/** Returns CLI args for a readonly bind mount. */
+/** No-op: no container mounts in direct-runner mode. */
 export function readonlyMountArgs(
-  hostPath: string,
-  containerPath: string,
+  _hostPath: string,
+  _containerPath: string,
 ): string[] {
-  return ['-v', `${hostPath}:${containerPath}:ro`];
+  return [];
 }
 
-/** Returns the shell command to stop a container by name. */
-export function stopContainer(name: string): string {
-  return `${CONTAINER_RUNTIME_BIN} stop -t 1 ${name}`;
+/** No-op: no containers to stop. */
+export function stopContainer(_name: string): string {
+  return 'true'; // shell no-op
 }
 
-/** Ensure the container runtime is running, starting it if needed. */
+/** Verify that the `claude` CLI is available on the host. */
 export function ensureContainerRuntimeRunning(): void {
   try {
-    execSync(`${CONTAINER_RUNTIME_BIN} info`, {
+    const version = execSync('claude --version', {
       stdio: 'pipe',
       timeout: 10000,
-    });
-    logger.debug('Container runtime already running');
+      encoding: 'utf-8',
+    }).trim();
+    logger.info({ version }, 'Claude CLI available');
   } catch (err) {
-    logger.error({ err }, 'Failed to reach container runtime');
+    logger.error({ err }, 'Claude CLI not found');
     console.error(
       '\n╔════════════════════════════════════════════════════════════════╗',
     );
     console.error(
-      '║  FATAL: Container runtime failed to start                      ║',
+      '║  FATAL: Claude CLI not found                                   ║',
     );
     console.error(
       '║                                                                ║',
     );
     console.error(
-      '║  Agents cannot run without a container runtime. To fix:        ║',
+      '║  Direct-runner mode requires the `claude` CLI on PATH.         ║',
     );
     console.error(
-      '║  1. Ensure Docker is installed and running                     ║',
-    );
-    console.error(
-      '║  2. Run: docker info                                           ║',
-    );
-    console.error(
-      '║  3. Restart NanoClaw                                           ║',
+      '║  Install: npm install -g @anthropic-ai/claude-code             ║',
     );
     console.error(
       '╚════════════════════════════════════════════════════════════════╝\n',
     );
-    throw new Error('Container runtime is required but failed to start', {
-      cause: err,
-    });
+    throw new Error('Claude CLI is required but not found', { cause: err });
   }
 }
 
-/** Kill orphaned NanoClaw containers from previous runs. */
+/** No-op: no orphaned containers in direct-runner mode. */
 export function cleanupOrphans(): void {
-  try {
-    const output = execSync(
-      `${CONTAINER_RUNTIME_BIN} ps --filter name=nanoclaw- --format '{{.Names}}'`,
-      { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' },
-    );
-    const orphans = output.trim().split('\n').filter(Boolean);
-    for (const name of orphans) {
-      try {
-        execSync(stopContainer(name), { stdio: 'pipe' });
-      } catch {
-        /* already stopped */
-      }
-    }
-    if (orphans.length > 0) {
-      logger.info(
-        { count: orphans.length, names: orphans },
-        'Stopped orphaned containers',
-      );
-    }
-  } catch (err) {
-    logger.warn({ err }, 'Failed to clean up orphaned containers');
-  }
+  logger.debug('cleanupOrphans: no-op in direct-runner mode');
 }
