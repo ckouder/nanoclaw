@@ -5,6 +5,9 @@
 
 // gmail
 
+// http-webhook
+import './http-webhook.js';
+
 // slack
 import './slack.js';
 
