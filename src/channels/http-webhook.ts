@@ -1,8 +1,15 @@
+import fs from 'node:fs';
 import http from 'node:http';
 
+import {
+  getAllRegisteredGroups,
+  setRegisteredGroup,
+  deleteRegisteredGroup,
+} from '../db.js';
+import { isValidGroupFolder, resolveGroupFolderPath } from '../group-folder.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
-import { Channel, NewMessage, OnInboundMessage, OnChatMetadata } from '../types.js';
+import { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
 
 const DEFAULT_PORT = 4000;
 const REQUEST_TIMEOUT = 300_000; // 5 minutes — matches container timeout
@@ -107,8 +114,136 @@ export class HttpWebhookChannel implements Channel {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/register-group') {
+      this.handleRegisterGroup(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/groups') {
+      this.handleListGroups(req, res);
+      return;
+    }
+
+    if (req.method === 'DELETE' && req.url === '/register-group') {
+      this.handleUnregisterGroup(req, res);
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+  }
+
+  private readBody(req: http.IncomingMessage): Promise<string> {
+    return new Promise((resolve) => {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => resolve(body));
+    });
+  }
+
+  private async handleRegisterGroup(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const raw = await this.readBody(req);
+    let parsed: { jid?: string; name?: string; folder?: string; isMain?: boolean; trigger?: string };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+      return;
+    }
+
+    if (!parsed.jid || !parsed.name || !parsed.folder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Missing required fields: jid, name, folder' }));
+      return;
+    }
+
+    if (!isValidGroupFolder(parsed.folder)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: `Invalid folder name: ${parsed.folder}` }));
+      return;
+    }
+
+    // Check for duplicate JID
+    const existing = getAllRegisteredGroups();
+    if (existing[parsed.jid]) {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: `Group already registered: ${parsed.jid}` }));
+      return;
+    }
+
+    const group: RegisteredGroup = {
+      name: parsed.name,
+      folder: parsed.folder,
+      trigger: parsed.trigger || parsed.name,
+      added_at: new Date().toISOString(),
+      isMain: parsed.isMain || false,
+      requiresTrigger: !parsed.isMain,
+    };
+
+    try {
+      setRegisteredGroup(parsed.jid, group);
+
+      // Create group folder if it doesn't exist
+      const groupDir = resolveGroupFolderPath(parsed.folder);
+      fs.mkdirSync(groupDir, { recursive: true });
+
+      logger.info({ jid: parsed.jid, name: parsed.name, folder: parsed.folder }, 'Group registered via HTTP');
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, group: { jid: parsed.jid, name: parsed.name, folder: parsed.folder } }));
+    } catch (err) {
+      logger.error({ err, jid: parsed.jid }, 'Failed to register group');
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(err) }));
+    }
+  }
+
+  private handleListGroups(_req: http.IncomingMessage, res: http.ServerResponse): void {
+    try {
+      const groups = getAllRegisteredGroups();
+      const list = Object.entries(groups).map(([jid, g]) => ({
+        jid,
+        name: g.name,
+        folder: g.folder,
+        isMain: g.isMain || false,
+        trigger: g.trigger,
+      }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, groups: list }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(err) }));
+    }
+  }
+
+  private async handleUnregisterGroup(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const raw = await this.readBody(req);
+    let parsed: { jid?: string };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+      return;
+    }
+
+    if (!parsed.jid) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Missing required field: jid' }));
+      return;
+    }
+
+    const deleted = deleteRegisteredGroup(parsed.jid);
+    if (!deleted) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: `Group not found: ${parsed.jid}` }));
+      return;
+    }
+
+    logger.info({ jid: parsed.jid }, 'Group unregistered via HTTP');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private handleMessage(req: http.IncomingMessage, res: http.ServerResponse): void {
