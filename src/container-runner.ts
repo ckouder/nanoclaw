@@ -54,7 +54,7 @@ async function buildProcessEnv(
   groupDir: string,
 ): Promise<Record<string, string>> {
   const env: Record<string, string> = {
-    ...process.env as Record<string, string>,
+    ...(process.env as Record<string, string>),
     TZ: TIMEZONE,
     // Claude Code settings
     CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',

@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  beforeAll,
+  afterAll,
+} from 'vitest';
 import http from 'node:http';
 
 // --- Mocks ---
@@ -30,11 +39,24 @@ function makeOpts(overrides?: Partial<ChannelOpts>): ChannelOpts {
   };
 }
 
-function post(port: number, path: string, body: unknown): Promise<{ status: number; body: any }> {
+function post(
+  port: number,
+  path: string,
+  body: unknown,
+): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
+      {
+        hostname: '127.0.0.1',
+        port,
+        path,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+        },
+      },
       (res) => {
         let buf = '';
         res.on('data', (chunk) => (buf += chunk));
@@ -53,11 +75,24 @@ function post(port: number, path: string, body: unknown): Promise<{ status: numb
   });
 }
 
-function del(port: number, path: string, body: unknown): Promise<{ status: number; body: any }> {
+function del(
+  port: number,
+  path: string,
+  body: unknown,
+): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'DELETE', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
+      {
+        hostname: '127.0.0.1',
+        port,
+        path,
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+        },
+      },
       (res) => {
         let buf = '';
         res.on('data', (chunk) => (buf += chunk));
@@ -76,19 +111,24 @@ function del(port: number, path: string, body: unknown): Promise<{ status: numbe
   });
 }
 
-function get(port: number, path: string): Promise<{ status: number; body: any }> {
+function get(
+  port: number,
+  path: string,
+): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
-    http.get(`http://127.0.0.1:${port}${path}`, (res) => {
-      let buf = '';
-      res.on('data', (chunk) => (buf += chunk));
-      res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode!, body: JSON.parse(buf) });
-        } catch {
-          resolve({ status: res.statusCode!, body: buf });
-        }
-      });
-    }).on('error', reject);
+    http
+      .get(`http://127.0.0.1:${port}${path}`, (res) => {
+        let buf = '';
+        res.on('data', (chunk) => (buf += chunk));
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode!, body: JSON.parse(buf) });
+          } catch {
+            resolve({ status: res.statusCode!, body: buf });
+          }
+        });
+      })
+      .on('error', reject);
   });
 }
 
@@ -129,19 +169,29 @@ describe('HttpWebhookChannel', () => {
   });
 
   it('rejects invalid JSON body', async () => {
-    const res = await new Promise<{ status: number; body: any }>((resolve, reject) => {
-      const req = http.request(
-        { hostname: '127.0.0.1', port, path: '/message', method: 'POST', headers: { 'Content-Type': 'application/json' } },
-        (res) => {
-          let buf = '';
-          res.on('data', (chunk) => (buf += chunk));
-          res.on('end', () => resolve({ status: res.statusCode!, body: JSON.parse(buf) }));
-        },
-      );
-      req.on('error', reject);
-      req.write('not json');
-      req.end();
-    });
+    const res = await new Promise<{ status: number; body: any }>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/message',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          },
+          (res) => {
+            let buf = '';
+            res.on('data', (chunk) => (buf += chunk));
+            res.on('end', () =>
+              resolve({ status: res.statusCode!, body: JSON.parse(buf) }),
+            );
+          },
+        );
+        req.on('error', reject);
+        req.write('not json');
+        req.end();
+      },
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid JSON');
   });
@@ -184,7 +234,9 @@ describe('HttpWebhookChannel', () => {
       senderId: 'u1',
     });
 
-    await vi.waitFor(() => expect(opts.onMessage).toHaveBeenCalled(), { timeout: 1000 });
+    await vi.waitFor(() => expect(opts.onMessage).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
 
     // Disconnect channel to reject pending requests (simulates timeout behavior)
     await channel.disconnect();
@@ -234,7 +286,11 @@ describe('HttpWebhookChannel', () => {
       const channels = [
         { jid: 'http:slack-general', name: 'general', folder: 'slack-general' },
         { jid: 'http:slack-random', name: 'random', folder: 'slack-random' },
-        { jid: 'http:slack-engineering', name: 'engineering', folder: 'slack-engineering' },
+        {
+          jid: 'http:slack-engineering',
+          name: 'engineering',
+          folder: 'slack-engineering',
+        },
       ];
 
       for (const ch of channels) {
@@ -296,16 +352,25 @@ describe('HttpWebhookChannel', () => {
 
     it('rejects registration with missing required fields', async () => {
       // Missing jid
-      let res = await post(port, '/register-group', { name: 'test', folder: 'test' });
+      let res = await post(port, '/register-group', {
+        name: 'test',
+        folder: 'test',
+      });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('Missing required fields');
 
       // Missing name
-      res = await post(port, '/register-group', { jid: 'http:x', folder: 'test' });
+      res = await post(port, '/register-group', {
+        jid: 'http:x',
+        folder: 'test',
+      });
       expect(res.status).toBe(400);
 
       // Missing folder
-      res = await post(port, '/register-group', { jid: 'http:x', name: 'test' });
+      res = await post(port, '/register-group', {
+        jid: 'http:x',
+        name: 'test',
+      });
       expect(res.status).toBe(400);
     });
 
@@ -330,19 +395,29 @@ describe('HttpWebhookChannel', () => {
     });
 
     it('rejects invalid JSON in register-group', async () => {
-      const res = await new Promise<{ status: number; body: any }>((resolve, reject) => {
-        const req = http.request(
-          { hostname: '127.0.0.1', port, path: '/register-group', method: 'POST', headers: { 'Content-Type': 'application/json' } },
-          (r) => {
-            let buf = '';
-            r.on('data', (chunk) => (buf += chunk));
-            r.on('end', () => resolve({ status: r.statusCode!, body: JSON.parse(buf) }));
-          },
-        );
-        req.on('error', reject);
-        req.write('not json');
-        req.end();
-      });
+      const res = await new Promise<{ status: number; body: any }>(
+        (resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: '127.0.0.1',
+              port,
+              path: '/register-group',
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            },
+            (r) => {
+              let buf = '';
+              r.on('data', (chunk) => (buf += chunk));
+              r.on('end', () =>
+                resolve({ status: r.statusCode!, body: JSON.parse(buf) }),
+              );
+            },
+          );
+          req.on('error', reject);
+          req.write('not json');
+          req.end();
+        },
+      );
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Invalid JSON');
     });
@@ -391,7 +466,9 @@ describe('HttpWebhookChannel', () => {
         folder: 'deleteme',
       });
 
-      const delRes = await del(port, '/register-group', { jid: 'http:to-delete' });
+      const delRes = await del(port, '/register-group', {
+        jid: 'http:to-delete',
+      });
       expect(delRes.status).toBe(200);
       expect(delRes.body.ok).toBe(true);
 
@@ -401,7 +478,9 @@ describe('HttpWebhookChannel', () => {
     });
 
     it('returns 404 for non-existent group', async () => {
-      const res = await del(port, '/register-group', { jid: 'http:nonexistent' });
+      const res = await del(port, '/register-group', {
+        jid: 'http:nonexistent',
+      });
       expect(res.status).toBe(404);
       expect(res.body.ok).toBe(false);
     });
@@ -416,25 +495,33 @@ describe('HttpWebhookChannel', () => {
       const res = await del(port, '/register-group', 'not-valid-json' as any);
       // The del() helper calls JSON.stringify which will produce a quoted string,
       // so let's test with a raw request instead
-      const rawRes = await new Promise<{ status: number; body: any }>((resolve, reject) => {
-        const req = http.request(
-          { hostname: '127.0.0.1', port, path: '/register-group', method: 'DELETE', headers: { 'Content-Type': 'application/json' } },
-          (r) => {
-            let buf = '';
-            r.on('data', (chunk) => (buf += chunk));
-            r.on('end', () => {
-              try {
-                resolve({ status: r.statusCode!, body: JSON.parse(buf) });
-              } catch {
-                resolve({ status: r.statusCode!, body: buf });
-              }
-            });
-          },
-        );
-        req.on('error', reject);
-        req.write('bad');
-        req.end();
-      });
+      const rawRes = await new Promise<{ status: number; body: any }>(
+        (resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: '127.0.0.1',
+              port,
+              path: '/register-group',
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+            },
+            (r) => {
+              let buf = '';
+              r.on('data', (chunk) => (buf += chunk));
+              r.on('end', () => {
+                try {
+                  resolve({ status: r.statusCode!, body: JSON.parse(buf) });
+                } catch {
+                  resolve({ status: r.statusCode!, body: buf });
+                }
+              });
+            },
+          );
+          req.on('error', reject);
+          req.write('bad');
+          req.end();
+        },
+      );
       expect(rawRes.status).toBe(400);
     });
   });
@@ -452,7 +539,10 @@ describe('HttpWebhookChannel', () => {
 
       (opts.onMessage as ReturnType<typeof vi.fn>).mockImplementation(
         (_jid: string, _msg: NewMessage) => {
-          setTimeout(() => channel.sendMessage('http:main-ch', 'main response'), 10);
+          setTimeout(
+            () => channel.sendMessage('http:main-ch', 'main response'),
+            10,
+          );
         },
       );
 
@@ -477,7 +567,10 @@ describe('HttpWebhookChannel', () => {
 
       (opts.onMessage as ReturnType<typeof vi.fn>).mockImplementation(
         (_jid: string, msg: NewMessage) => {
-          setTimeout(() => channel.sendMessage(msg.chat_jid, 'side response'), 10);
+          setTimeout(
+            () => channel.sendMessage(msg.chat_jid, 'side response'),
+            10,
+          );
         },
       );
 
@@ -534,7 +627,8 @@ describe('HttpWebhookChannel', () => {
 
       (opts.onMessage as ReturnType<typeof vi.fn>).mockImplementation(
         (_jid: string, msg: NewMessage) => {
-          const response = msg.chat_jid === 'http:ch-alpha' ? 'alpha reply' : 'beta reply';
+          const response =
+            msg.chat_jid === 'http:ch-alpha' ? 'alpha reply' : 'beta reply';
           setTimeout(() => channel.sendMessage(msg.chat_jid, response), 10);
         },
       );
@@ -549,12 +643,14 @@ describe('HttpWebhookChannel', () => {
         // Small delay to avoid chatToPendingId race since both resolve via same map
         new Promise<{ status: number; body: any }>((resolve) => {
           setTimeout(async () => {
-            resolve(await post(port, '/message', {
-              text: 'msg to beta',
-              chatJid: 'http:ch-beta',
-              senderName: 'User',
-              senderId: 'u2',
-            }));
+            resolve(
+              await post(port, '/message', {
+                text: 'msg to beta',
+                chatJid: 'http:ch-beta',
+                senderName: 'User',
+                senderId: 'u2',
+              }),
+            );
           }, 50);
         }),
       ]);
@@ -622,8 +718,16 @@ describe('HttpWebhookChannel', () => {
       (opts.onMessage as ReturnType<typeof vi.fn>).mockImplementation(
         (_jid: string, msg: NewMessage) => {
           // Simulate varying response times
-          const delay = msg.chat_jid.endsWith('1') ? 30 : msg.chat_jid.endsWith('2') ? 10 : 20;
-          setTimeout(() => channel.sendMessage(msg.chat_jid, `reply-from-${msg.chat_jid}`), delay);
+          const delay = msg.chat_jid.endsWith('1')
+            ? 30
+            : msg.chat_jid.endsWith('2')
+              ? 10
+              : 20;
+          setTimeout(
+            () =>
+              channel.sendMessage(msg.chat_jid, `reply-from-${msg.chat_jid}`),
+            delay,
+          );
         },
       );
 
@@ -637,22 +741,26 @@ describe('HttpWebhookChannel', () => {
         }),
         new Promise<{ status: number; body: any }>((resolve) => {
           setTimeout(async () => {
-            resolve(await post(port, '/message', {
-              text: 'msg2',
-              chatJid: 'http:concurrent-2',
-              senderName: 'User',
-              senderId: 'u2',
-            }));
+            resolve(
+              await post(port, '/message', {
+                text: 'msg2',
+                chatJid: 'http:concurrent-2',
+                senderName: 'User',
+                senderId: 'u2',
+              }),
+            );
           }, 5);
         }),
         new Promise<{ status: number; body: any }>((resolve) => {
           setTimeout(async () => {
-            resolve(await post(port, '/message', {
-              text: 'msg3',
-              chatJid: 'http:concurrent-3',
-              senderName: 'User',
-              senderId: 'u3',
-            }));
+            resolve(
+              await post(port, '/message', {
+                text: 'msg3',
+                chatJid: 'http:concurrent-3',
+                senderName: 'User',
+                senderId: 'u3',
+              }),
+            );
           }, 10);
         }),
       ]);

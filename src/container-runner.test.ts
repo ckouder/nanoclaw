@@ -130,11 +130,7 @@ describe('container-runner spawns claude CLI', () => {
   });
 
   it('spawns claude with correct args', async () => {
-    const resultPromise = runContainerAgent(
-      testGroup,
-      testInput,
-      () => {},
-    );
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
 
     // Yield microtasks so the async buildProcessEnv resolves before spawn is called
     await vi.advanceTimersByTimeAsync(0);
@@ -142,7 +138,13 @@ describe('container-runner spawns claude CLI', () => {
     // Verify spawn was called with claude
     expect(spawn).toHaveBeenCalledWith(
       'claude',
-      expect.arrayContaining(['--print', '--output-format', 'json', '-p', 'Hello']),
+      expect.arrayContaining([
+        '--print',
+        '--output-format',
+        'json',
+        '-p',
+        'Hello',
+      ]),
       expect.objectContaining({
         stdio: ['pipe', 'pipe', 'pipe'],
       }),

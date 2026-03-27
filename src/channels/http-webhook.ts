@@ -9,7 +9,13 @@ import {
 import { isValidGroupFolder, resolveGroupFolderPath } from '../group-folder.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
-import { Channel, NewMessage, OnInboundMessage, OnChatMetadata, RegisteredGroup } from '../types.js';
+import {
+  Channel,
+  NewMessage,
+  OnInboundMessage,
+  OnChatMetadata,
+  RegisteredGroup,
+} from '../types.js';
 
 const DEFAULT_PORT = 4000;
 const REQUEST_TIMEOUT = 300_000; // 5 minutes — matches container timeout
@@ -45,7 +51,10 @@ export class HttpWebhookChannel implements Channel {
   constructor(opts: ChannelOpts) {
     this.onMessage = opts.onMessage;
     this.onChatMetadata = opts.onChatMetadata;
-    this.port = parseInt(process.env.HTTP_CHANNEL_PORT || String(DEFAULT_PORT), 10);
+    this.port = parseInt(
+      process.env.HTTP_CHANNEL_PORT || String(DEFAULT_PORT),
+      10,
+    );
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
   }
 
@@ -69,7 +78,10 @@ export class HttpWebhookChannel implements Channel {
 
     const pending = this.pending.get(msgId);
     if (!pending) {
-      logger.warn({ jid, msgId }, 'http-webhook: pending request already resolved');
+      logger.warn(
+        { jid, msgId },
+        'http-webhook: pending request already resolved',
+      );
       return;
     }
 
@@ -102,7 +114,10 @@ export class HttpWebhookChannel implements Channel {
     });
   }
 
-  private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+  private handleRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): void {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
@@ -136,14 +151,25 @@ export class HttpWebhookChannel implements Channel {
   private readBody(req: http.IncomingMessage): Promise<string> {
     return new Promise((resolve) => {
       let body = '';
-      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+      });
       req.on('end', () => resolve(body));
     });
   }
 
-  private async handleRegisterGroup(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async handleRegisterGroup(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const raw = await this.readBody(req);
-    let parsed: { jid?: string; name?: string; folder?: string; isMain?: boolean; trigger?: string };
+    let parsed: {
+      jid?: string;
+      name?: string;
+      folder?: string;
+      isMain?: boolean;
+      trigger?: string;
+    };
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -154,13 +180,23 @@ export class HttpWebhookChannel implements Channel {
 
     if (!parsed.jid || !parsed.name || !parsed.folder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Missing required fields: jid, name, folder' }));
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: 'Missing required fields: jid, name, folder',
+        }),
+      );
       return;
     }
 
     if (!isValidGroupFolder(parsed.folder)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: `Invalid folder name: ${parsed.folder}` }));
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: `Invalid folder name: ${parsed.folder}`,
+        }),
+      );
       return;
     }
 
@@ -168,7 +204,12 @@ export class HttpWebhookChannel implements Channel {
     const existing = getAllRegisteredGroups();
     if (existing[parsed.jid]) {
       res.writeHead(409, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: `Group already registered: ${parsed.jid}` }));
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: `Group already registered: ${parsed.jid}`,
+        }),
+      );
       return;
     }
 
@@ -188,10 +229,18 @@ export class HttpWebhookChannel implements Channel {
       const groupDir = resolveGroupFolderPath(parsed.folder);
       fs.mkdirSync(groupDir, { recursive: true });
 
-      logger.info({ jid: parsed.jid, name: parsed.name, folder: parsed.folder }, 'Group registered via HTTP');
+      logger.info(
+        { jid: parsed.jid, name: parsed.name, folder: parsed.folder },
+        'Group registered via HTTP',
+      );
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, group: { jid: parsed.jid, name: parsed.name, folder: parsed.folder } }));
+      res.end(
+        JSON.stringify({
+          ok: true,
+          group: { jid: parsed.jid, name: parsed.name, folder: parsed.folder },
+        }),
+      );
     } catch (err) {
       logger.error({ err, jid: parsed.jid }, 'Failed to register group');
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -199,7 +248,10 @@ export class HttpWebhookChannel implements Channel {
     }
   }
 
-  private handleListGroups(_req: http.IncomingMessage, res: http.ServerResponse): void {
+  private handleListGroups(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): void {
     try {
       const groups = getAllRegisteredGroups();
       const list = Object.entries(groups).map(([jid, g]) => ({
@@ -217,7 +269,10 @@ export class HttpWebhookChannel implements Channel {
     }
   }
 
-  private async handleUnregisterGroup(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async handleUnregisterGroup(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const raw = await this.readBody(req);
     let parsed: { jid?: string };
     try {
@@ -230,14 +285,18 @@ export class HttpWebhookChannel implements Channel {
 
     if (!parsed.jid) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Missing required field: jid' }));
+      res.end(
+        JSON.stringify({ ok: false, error: 'Missing required field: jid' }),
+      );
       return;
     }
 
     const deleted = deleteRegisteredGroup(parsed.jid);
     if (!deleted) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: `Group not found: ${parsed.jid}` }));
+      res.end(
+        JSON.stringify({ ok: false, error: `Group not found: ${parsed.jid}` }),
+      );
       return;
     }
 
@@ -246,7 +305,10 @@ export class HttpWebhookChannel implements Channel {
     res.end(JSON.stringify({ ok: true }));
   }
 
-  private handleMessage(req: http.IncomingMessage, res: http.ServerResponse): void {
+  private handleMessage(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): void {
     let body = '';
     req.on('data', (chunk: Buffer) => {
       body += chunk.toString();
@@ -262,9 +324,20 @@ export class HttpWebhookChannel implements Channel {
         return;
       }
 
-      if (!parsed.text || !parsed.chatJid || !parsed.senderName || !parsed.senderId) {
+      if (
+        !parsed.text ||
+        !parsed.chatJid ||
+        !parsed.senderName ||
+        !parsed.senderId
+      ) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: 'Missing required fields: text, chatJid, senderName, senderId' }));
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error:
+              'Missing required fields: text, chatJid, senderName, senderId',
+          }),
+        );
         return;
       }
 
